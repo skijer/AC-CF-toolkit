@@ -3,22 +3,67 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 def read_bin_file(file_path):
-    # Open file as a binary
+    """
+    Read binary file and return its content as bytes.
+
+    Parameters:
+    file_path (str): Path to the binary file.
+
+    Returns:
+    bytes: Content of the binary file.
+    """
     with open(file_path, 'rb') as bin_file:
         return bin_file.read()
 
 def read_hex(data, offset):
-    # Convert the bytes at the specified offset to an integer
+    """
+    Convert the bytes at the specified offset to an integer.
+
+    Parameters:
+    data (bytes): Binary data to read.
+    offset (int): Offset in bytes from which to read.
+
+    Returns:
+    int: Integer value of the bytes at the specified offset.
+    """
     byte_hex = data[offset:offset+1]
-    byte = int(byte_hex.hex(), 16)
-    return byte
+    return int(byte_hex.hex(), 16)
 
 def get_high_nibble(byte):
+    """
+    Get the high nibble (first 4 bits) of a byte.
+
+    Parameters:
+    byte (int): Byte value.
+
+    Returns:
+    int: High nibble of the byte.
+    """
     return byte >> 4
+
 def get_low_nibble(byte):
+    """
+    Get the low nibble (last 4 bits) of a byte.
+
+    Parameters:
+    byte (int): Byte value.
+
+    Returns:
+    int: Low nibble of the byte.
+    """
     return byte & 0x0F
 
 def parse_block(data, block_number):
+    """
+    Parse the binary data of a villager block and return a dictionary containing the extracted information.
+
+    Parameters:
+    data (bytes): Binary data of the villager block.
+    block_number (int): Block number.
+
+    Returns:
+    dict: Dictionary containing the extracted information of the villager block.
+    """
     block_data = {}
 
     # Different languages names
@@ -32,7 +77,7 @@ def parse_block(data, block_number):
         offset += 18
     block_data["Names"] = names
 
-    # Catchphrases on different languages:
+    # Catchphrases on different languages
     catchphrases = {}
     offset = 0xB2
     languages = ["Japanese", "English US", "Spanish America", "French Canada", "English", "Spanish", "French", "Italian", "German", "Korean"]
@@ -82,6 +127,13 @@ def parse_block(data, block_number):
     return block_data
 
 def save_to_excel(parsed_data, output_path):
+    """
+    Save parsed data to an Excel file.
+
+    Parameters:
+    parsed_data (list): List of dictionaries containing parsed data for each block.
+    output_path (str): Path to save the Excel file.
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Villager Data"
@@ -112,6 +164,13 @@ def save_to_excel(parsed_data, output_path):
     wb.save(output_path)
 
 def process_bin_file(input_path, output_path):
+    """
+    Process the binary file containing villager data and save parsed data to an Excel file.
+
+    Parameters:
+    input_path (str): Path to the input binary file.
+    output_path (str): Path to save the output Excel file.
+    """
     binary_data = read_bin_file(input_path)
     block_size = 408  # villager memory size
 
@@ -129,3 +188,4 @@ def process_bin_file(input_path, output_path):
 
 # Initializer
 process_bin_file('pack.bin', 'pack.xlsx')
+
