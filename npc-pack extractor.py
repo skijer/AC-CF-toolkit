@@ -1,71 +1,61 @@
-import struct
+# Import necessary libraries
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+import pandas as pd
+from tqdm import tqdm  # Import tqdm for progress bar
 
 def read_bin_file(file_path):
-    """
-    Read binary file and return its content as bytes.
-
-    Parameters:
-    file_path (str): Path to the binary file.
-
-    Returns:
-    bytes: Content of the binary file.
-    """
+    # Open file as a binary
     with open(file_path, 'rb') as bin_file:
         return bin_file.read()
 
 def read_hex(data, offset):
-    """
-    Convert the bytes at the specified offset to an integer.
-
-    Parameters:
-    data (bytes): Binary data to read.
-    offset (int): Offset in bytes from which to read.
-
-    Returns:
-    int: Integer value of the bytes at the specified offset.
-    """
+    # Convert the bytes at the specified offset to an integer
     byte_hex = data[offset:offset+1]
-    return int(byte_hex.hex(), 16)
+    byte = int(byte_hex.hex(), 16)
+    return byte
+
+def feature_hex_transform(data, offset, df):
+    # Convert the bytes at the specified offset to an item on the item list  and divided by 4 natural spacing
+    byte_hex = data[offset:offset+2]
+    byte = int(byte_hex.hex(), 16) - 36864
+    byte_div = byte / 4
+    
+    # Use the DataFrame passed as an argument and search for the row
+    row = df[df['DEC ID'] == byte_div]
+    
+    # Check if the row was found and return the value from the column 'English' Change to a language you want
+    if not row.empty:
+        return str(row['English'].values[0])
+    else:
+        return None
+
 
 def get_high_nibble(byte):
-    """
-    Get the high nibble (first 4 bits) of a byte.
-
-    Parameters:
-    byte (int): Byte value.
-
-    Returns:
-    int: High nibble of the byte.
-    """
     return byte >> 4
-
 def get_low_nibble(byte):
-    """
-    Get the low nibble (last 4 bits) of a byte.
-
-    Parameters:
-    byte (int): Byte value.
-
-    Returns:
-    int: Low nibble of the byte.
-    """
     return byte & 0x0F
 
-def parse_block(data, block_number):
-    """
-    Parse the binary data of a villager block and return a dictionary containing the extracted information.
-
-    Parameters:
-    data (bytes): Binary data of the villager block.
-    block_number (int): Block number.
-
-    Returns:
-    dict: Dictionary containing the extracted information of the villager block.
-    """
+def parse_block(data, block_number, df):
     block_data = {}
-
+    offset=00
+    # House information
+    house = {}
+    furnitures = ["space","Master model number", "Default shirt", "Default Floor", "Default Wall", "Default Parasol", "Item 01", "Item 02", "Item 03", "Item 04", "Item 05", "Item 06", "Item 07", "Item 09", "Item 10", "Item 11", "K.K. Song","Unknown"]
+    for ftr in furnitures:
+        if ftr == "space":
+            value = data[offset:offset+1].hex().upper()
+        elif ftr == "Master model number":
+            value = str(read_hex(data, offset))
+        elif ftr == "Unknown":
+            value = data[offset:offset+2].hex().upper()
+        else:
+            value = feature_hex_transform(data, offset, df)
+            offset += 1
+        house[ftr] = value
+        offset += 1
+    block_data["House"] = house
+    
     # Different languages names
     names = {}
     offset = 0x22
@@ -77,10 +67,10 @@ def parse_block(data, block_number):
         offset += 18
     block_data["Names"] = names
 
-    # Catchphrases on different languages
+    # Catchphrases on different languages:
     catchphrases = {}
     offset = 0xB2
-    languages = ["Japanese", "English US", "Spanish America", "French Canada", "English", "Spanish", "French", "Italian", "German", "Korean"]
+    languages = ["Catch-Japanese", "Catch-English US", "Catch-Spanish America", "Catch-French Canada", "Catch-English", "Catch-Spanish", "Catch-French", "Catch-Italian", "Catch-German", "Catch-Korean"]
     for language in languages:
         phrase = data[offset:offset + 22]
         phrase_str = phrase.decode('utf-16-be', errors='ignore').strip('\x00')
@@ -90,14 +80,14 @@ def parse_block(data, block_number):
 
     # Villager stats variables:
     stats = {}
-    stats_name = ["Specie", "Month of birth", "Day of birth", "Unknown", "Favorite clothing", "Less favorite clothing", "Favorite furniture color", "Favorite furniture series", "Personality", "Favorite furniture styles", "Starting villager"]
+    stats_name = ["Specie", "Month of birth", "Day of birth", "Unknown-Stat", "Favorite clothing", "Less favorite clothing", "Favorite furniture color", "Favorite furniture series", "Personality", "Favorite furniture styles", "Starting villager"]
     for stat in stats_name:
         if stat == "Specie":
             stat_characteristics = ["cat", "elephant", "sheep", "bear", "dog", "squirrel", "rabbit", "duck", "hip", "wolf", "mouse", "pig", "chicken", "bull", "cow", "bird", "frog", "alligator", "goat", "tiger", "anteater", "koala", "horse", "octopus", "lion", "bear cub", "rhinoceros", "gorilla", "ostrich", "kangaroo", "eagle", "penguin", "monkey"]
             value = stat_characteristics[read_hex(data, offset)]
         elif stat == "Month of birth" or stat == "Day of birth":
             value = str(read_hex(data, offset))
-        elif stat == "Unknown":
+        elif stat == "Unknown-Stat":
             value = data[offset:offset+1].hex().upper()
         elif stat == "Favorite clothing" or stat == "Less favorite clothing":
             stat_characteristics = ["cute", "cool", "subtle", "gaudy", "strange", "funky", "refined", "fresh", "stylish", "striking"]
@@ -127,22 +117,16 @@ def parse_block(data, block_number):
     return block_data
 
 def save_to_excel(parsed_data, output_path):
-    """
-    Save parsed data to an Excel file.
-
-    Parameters:
-    parsed_data (list): List of dictionaries containing parsed data for each block.
-    output_path (str): Path to save the Excel file.
-    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Villager Data"
     
-    headers = ["Block Number"] + list(parsed_data[0]["Names"].keys()) + list(parsed_data[0]["Catchphrases"].keys()) + list(parsed_data[0]["Stats"].keys())
+    headers = ["Block Number"] + list(parsed_data[0]["House"].keys()) + list(parsed_data[0]["Names"].keys()) + list(parsed_data[0]["Catchphrases"].keys()) + list(parsed_data[0]["Stats"].keys())
     ws.append(headers)
 
     for block_number, block in enumerate(parsed_data, start=1):
         row = [block_number]
+        row.extend(block["House"].values())
         row.extend(block["Names"].values())
         row.extend(block["Catchphrases"].values())
         row.extend(block["Stats"].values())
@@ -164,28 +148,27 @@ def save_to_excel(parsed_data, output_path):
     wb.save(output_path)
 
 def process_bin_file(input_path, output_path):
-    """
-    Process the binary file containing villager data and save parsed data to an Excel file.
-
-    Parameters:
-    input_path (str): Path to the input binary file.
-    output_path (str): Path to save the output Excel file.
-    """
     binary_data = read_bin_file(input_path)
+    df = pd.read_excel("src/aurum's-item-list.xlsx", engine='openpyxl')
     block_size = 408  # villager memory size
 
     results = []
-    offset = 0x20
+    offset = 0x20 # Header
     block_number = 1
+
+    # Initialize tqdm for progress bar
+    pbar = tqdm(total=len(binary_data) // block_size, desc="Processing binary file", unit="block")
 
     while offset + block_size <= len(binary_data):
         block_data = binary_data[offset:offset + block_size]
-        results.append(parse_block(block_data, block_number))
+        results.append(parse_block(block_data, block_number, df))
         offset += block_size
         block_number += 1
+        pbar.update(1)  # Update progress bar    
+        # Finalize tqdm progress bar
+    pbar.close()
 
     save_to_excel(results, output_path)
 
 # Initializer
-process_bin_file('pack.bin', 'pack.xlsx')
-
+process_bin_file('pack.bin', 'pack.acdat')
